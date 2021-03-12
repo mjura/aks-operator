@@ -1,11 +1,11 @@
-package controller
+package utils
 
 import (
 	"github.com/Azure/go-autorest/autorest/to"
 	aksv1 "github.com/rancher/aks-operator/pkg/apis/aks.cattle.io/v1"
 )
 
-func buildNodePoolMap(nodePools []aksv1.AKSNodePool) map[string]*aksv1.AKSNodePool {
+func BuildNodePoolMap(nodePools []aksv1.AKSNodePool) map[string]*aksv1.AKSNodePool {
 	ret := make(map[string]*aksv1.AKSNodePool)
 	for i := range nodePools {
 		if nodePools[i].Name != nil {
