@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/services/containerservice/mgmt/2020-11-01/containerservice"
+	"github.com/Azure/azure-sdk-for-go/services/resources/mgmt/2019-10-01/resources"
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/adal"
 	"github.com/Azure/go-autorest/autorest/azure"
@@ -134,4 +136,28 @@ func GetCachedTenantID(secretClient secretClient, subscriptionID string, secret 
 		return tenantID, nil
 	}
 	return tenantID, err
+}
+
+func NewResourceGroupClient(cred *Credentials) (*resources.GroupsClient, error) {
+	authorizer, err := NewClientAuthorizer(cred)
+	if err != nil {
+		return nil, err
+	}
+
+	client := resources.NewGroupsClientWithBaseURI(to.String(cred.BaseURL), cred.SubscriptionID)
+	client.Authorizer = authorizer
+
+	return &client, nil
+}
+
+func NewClusterClient(cred *Credentials) (*containerservice.ManagedClustersClient, error) {
+	authorizer, err := NewClientAuthorizer(cred)
+	if err != nil {
+		return nil, err
+	}
+
+	client := containerservice.NewManagedClustersClientWithBaseURI(to.String(cred.BaseURL), cred.SubscriptionID)
+	client.Authorizer = authorizer
+
+	return &client, nil
 }
