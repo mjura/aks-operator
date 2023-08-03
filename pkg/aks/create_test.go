@@ -147,6 +147,7 @@ var _ = Describe("newManagedCluster", func() {
 		Expect(ipRanges).To(HaveLen(1))
 		Expect(ipRanges[0]).To(Equal(clusterSpecIPRanges[0]))
 		Expect(managedCluster.APIServerAccessProfile.EnablePrivateCluster).To(Equal(clusterSpec.PrivateCluster))
+		Expect(managedCluster.APIServerAccessProfile.PrivateDNSZone).To(Equal(clusterSpec.PrivateDNSZone))
 	})
 
 	It("should successfully create managed cluster with custom load balancer sku", func() {
@@ -520,6 +521,7 @@ func newTestClusterSpec() *aksv1.AKSClusterConfigSpec {
 		DNSPrefix:                  to.StringPtr("test-dns-prefix"),
 		AuthorizedIPRanges:         to.StringSlicePtr([]string{"test-authorized-ip-range"}),
 		PrivateCluster:             to.BoolPtr(true),
+		PrivateDNSZone:             to.StringPtr("test-private-dns-zone"),
 		LogAnalyticsWorkspaceGroup: to.StringPtr("test-log-analytics-workspace-group"),
 		LogAnalyticsWorkspaceName:  to.StringPtr("test-log-analytics-workspace-name"),
 	}
