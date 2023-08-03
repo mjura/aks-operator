@@ -270,6 +270,20 @@ func createManagedCluster(ctx context.Context, cred *Credentials, workplacesClie
 		}
 	}
 
+	if to.Bool(spec.ManagedIdentity) {
+		managedCluster.Identity = &containerservice.ManagedClusterIdentity{
+			Type: containerservice.ResourceIdentityTypeSystemAssigned,
+		}
+		if spec.UserAssignedIdentity != nil {
+			managedCluster.Identity = &containerservice.ManagedClusterIdentity{
+				Type: containerservice.ResourceIdentityTypeUserAssigned,
+				UserAssignedIdentities: map[string]*containerservice.ManagedClusterIdentityUserAssignedIdentitiesValue{
+					to.String(spec.UserAssignedIdentity): {},
+				},
+			}
+		}
+	}
+
 	return managedCluster, nil
 }
 
