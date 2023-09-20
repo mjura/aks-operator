@@ -28,7 +28,7 @@ on:
         default: "true"
 jobs:
   update-rancher-chart:
-    uses: rancher-sandbox/highlander-reusable-workflows/.github/workflows/update-rancher-charts.yaml@main
+    uses: mjura/highlander-reusable-workflows/.github/workflows/update-rancher-charts.yaml@main
     with:
       charts_ref: ${{ github.event.inputs.charts_ref }}
       operator: aks-operator
