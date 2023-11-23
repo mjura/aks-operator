@@ -11,7 +11,7 @@ updates:
 - package-ecosystem: "gomod"
   directory: "/"
   schedule:
-    interval: "weekly"
+    interval: "daily"
   ignore:
   - dependency-name: "sigs.k8s.io/controller-runtime"
   # Ignore k8s and its transitives modules as they are upgraded manually
