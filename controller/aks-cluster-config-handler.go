@@ -11,6 +11,9 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	azcoreto "github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
 	"github.com/Azure/azure-sdk-for-go/services/containerservice/mgmt/2020-11-01/containerservice"
 	"github.com/Azure/go-autorest/autorest/to"
 	"github.com/rancher/aks-operator/pkg/aks"
@@ -290,18 +293,18 @@ func (h *Handler) checkAndUpdate(config *aksv1.AKSClusterConfig) (*aksv1.AKSClus
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	result, err := h.azureClients.clustersClient.Get(ctx, config.Spec.ResourceGroup, config.Spec.ClusterName)
+	result, err := h.azureClients.clustersClient.Get(ctx, config.Spec.ResourceGroup, config.Spec.ClusterName, nil)
 	if err != nil {
 		return config, err
 	}
 
-	if config.Status.RBACEnabled == nil && result.EnableRBAC != nil {
+	if config.Status.RBACEnabled == nil && result.Properties.EnableRBAC != nil {
 		config = config.DeepCopy()
-		config.Status.RBACEnabled = result.EnableRBAC
+		config.Status.RBACEnabled = result.Properties.EnableRBAC
 		return h.aksCC.UpdateStatus(config)
 	}
 
-	clusterState := *result.ManagedClusterProperties.ProvisioningState
+	clusterState := *result.Properties.ProvisioningState
 	if clusterState == ClusterStatusFailed {
 		return config, fmt.Errorf("update failed for cluster [%s], status: %s", config.Spec.ClusterName, clusterState)
 	}
@@ -323,7 +326,7 @@ func (h *Handler) checkAndUpdate(config *aksv1.AKSClusterConfig) (*aksv1.AKSClus
 		return config, nil
 	}
 
-	for _, np := range *result.AgentPoolProfiles {
+	for _, np := range result.Properties.AgentPoolProfiles {
 		if status := to.String(np.ProvisioningState); status == NodePoolCreating ||
 			status == NodePoolScaling || status == NodePoolDeleting || status == NodePoolUpgrading {
 			// If the node pool is in an active state in Rancher but is updating in AKS, then an update was initiated outside of Rancher,
@@ -475,12 +478,12 @@ func (h *Handler) waitForCluster(config *aksv1.AKSClusterConfig) (*aksv1.AKSClus
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	result, err := h.azureClients.clustersClient.Get(ctx, config.Spec.ResourceGroup, config.Spec.ClusterName)
+	result, err := h.azureClients.clustersClient.Get(ctx, config.Spec.ResourceGroup, config.Spec.ClusterName, nil)
 	if err != nil {
 		return config, err
 	}
 
-	clusterState := *result.ManagedClusterProperties.ProvisioningState
+	clusterState := *result.Properties.ProvisioningState
 	if clusterState == ClusterStatusFailed {
 		return config, fmt.Errorf("creation for cluster [%s] status: %s", config.Spec.ClusterName, clusterState)
 	}
@@ -548,12 +551,12 @@ func (h *Handler) createCASecret(ctx context.Context, config *aksv1.AKSClusterCo
 }
 
 func (h *Handler) getClusterKubeConfig(ctx context.Context, spec *aksv1.AKSClusterConfigSpec) (restConfig *rest.Config, err error) {
-	accessProfile, err := h.azureClients.clustersClient.GetAccessProfile(ctx, spec.ResourceGroup, spec.ClusterName, "clusterAdmin")
+	accessProfile, err := h.azureClients.clustersClient.GetAccessProfile(ctx, spec.ResourceGroup, spec.ClusterName, "clusterAdmin", nil)
 	if err != nil {
 		return nil, err
 	}
 
-	config, err := clientcmd.RESTConfigFromKubeConfig(*accessProfile.KubeConfig)
+	config, err := clientcmd.RESTConfigFromKubeConfig(accessProfile.Properties.KubeConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -563,20 +566,20 @@ func (h *Handler) getClusterKubeConfig(ctx context.Context, spec *aksv1.AKSClust
 func (h *Handler) buildUpstreamClusterState(ctx context.Context, credentials *aks.Credentials, spec *aksv1.AKSClusterConfigSpec) (*aksv1.AKSClusterConfigSpec, error) {
 	upstreamSpec := &aksv1.AKSClusterConfigSpec{}
 
-	clusterState, err := h.azureClients.clustersClient.Get(ctx, spec.ResourceGroup, spec.ClusterName)
+	clusterState, err := h.azureClients.clustersClient.Get(ctx, spec.ResourceGroup, spec.ClusterName, nil)
 	if err != nil {
 		return nil, err
 	}
 
 	// set Kubernetes version
-	if clusterState.KubernetesVersion == nil {
+	if clusterState.Properties.KubernetesVersion == nil {
 		return nil, fmt.Errorf("cannot detect cluster [%s] upstream kubernetes version", spec.ClusterName)
 	}
-	upstreamSpec.KubernetesVersion = clusterState.KubernetesVersion
+	upstreamSpec.KubernetesVersion = clusterState.Properties.KubernetesVersion
 
 	// set DNS prefix
-	if clusterState.DNSPrefix != nil {
-		upstreamSpec.DNSPrefix = clusterState.DNSPrefix
+	if clusterState.Properties.DNSPrefix != nil {
+		upstreamSpec.DNSPrefix = clusterState.Properties.DNSPrefix
 	}
 
 	// set tags
@@ -590,7 +593,7 @@ func (h *Handler) buildUpstreamClusterState(ctx context.Context, credentials *ak
 	upstreamSpec.BaseURL = credentials.BaseURL
 
 	// set AgentPool profile
-	for _, np := range *clusterState.AgentPoolProfiles {
+	for _, np := range clusterState.Properties.AgentPoolProfiles {
 		var upstreamNP aksv1.AKSNodePool
 		upstreamNP.Name = np.Name
 		if to.String(np.ProvisioningState) != NodePoolSucceeded || to.Bool(np.EnableAutoScaling) {
@@ -614,13 +617,15 @@ func (h *Handler) buildUpstreamClusterState(ctx context.Context, credentials *ak
 			upstreamNP.Count = np.Count
 		}
 		upstreamNP.MaxPods = np.MaxPods
-		upstreamNP.VMSize = string(np.VMSize)
-		upstreamNP.OsDiskSizeGB = np.OsDiskSizeGB
-		upstreamNP.OsDiskType = string(np.OsDiskType)
-		upstreamNP.Mode = string(np.Mode)
-		upstreamNP.OsType = string(np.OsType)
+		upstreamNP.VMSize = *np.VMSize
+		upstreamNP.OsDiskSizeGB = np.OSDiskSizeGB
+		if np.OSDiskType != nil {
+			upstreamNP.OsDiskType = string(*np.OSDiskType)
+		}
+		upstreamNP.Mode = string(*np.Mode)
+		upstreamNP.OsType = string(*np.OSType)
 		upstreamNP.OrchestratorVersion = np.OrchestratorVersion
-		upstreamNP.AvailabilityZones = np.AvailabilityZones
+		upstreamNP.AvailabilityZones = utils.ConvertToPointerOfSlice(np.AvailabilityZones)
 		if np.EnableAutoScaling != nil {
 			upstreamNP.EnableAutoScaling = np.EnableAutoScaling
 			upstreamNP.MaxCount = np.MaxCount
@@ -632,7 +637,7 @@ func (h *Handler) buildUpstreamClusterState(ctx context.Context, credentials *ak
 			upstreamNP.NodeLabels = np.NodeLabels
 		}
 		if np.NodeTaints != nil {
-			upstreamNP.NodeTaints = np.NodeTaints
+			upstreamNP.NodeTaints = utils.ConvertToPointerOfSlice(np.NodeTaints)
 		}
 		if np.UpgradeSettings != nil && np.UpgradeSettings.MaxSurge != nil {
 			upstreamNP.MaxSurge = np.UpgradeSettings.MaxSurge
@@ -641,28 +646,33 @@ func (h *Handler) buildUpstreamClusterState(ctx context.Context, credentials *ak
 	}
 
 	// set network configuration
-	networkProfile := clusterState.NetworkProfile
+	networkProfile := clusterState.Properties.NetworkProfile
 	if networkProfile != nil {
-		upstreamSpec.NetworkPlugin = to.StringPtr(string(networkProfile.NetworkPlugin))
+		upstreamSpec.NetworkPlugin = azcoreto.Ptr(string(*networkProfile.NetworkPlugin))
 		upstreamSpec.NetworkDNSServiceIP = networkProfile.DNSServiceIP
-		upstreamSpec.NetworkDockerBridgeCIDR = networkProfile.DockerBridgeCidr
 		upstreamSpec.NetworkServiceCIDR = networkProfile.ServiceCidr
-		upstreamSpec.NetworkPolicy = to.StringPtr(string(networkProfile.NetworkPolicy))
 		upstreamSpec.NetworkPodCIDR = networkProfile.PodCidr
-		upstreamSpec.OutboundType = to.StringPtr(string(networkProfile.OutboundType))
-		upstreamSpec.LoadBalancerSKU = to.StringPtr(string(networkProfile.LoadBalancerSku))
+		if networkProfile.NetworkPolicy != nil {
+			upstreamSpec.NetworkPolicy = azcoreto.Ptr(string(*networkProfile.NetworkPolicy))
+		}
+		if networkProfile.OutboundType != nil {
+			upstreamSpec.OutboundType = azcoreto.Ptr(string(*networkProfile.OutboundType))
+		}
+		if networkProfile.LoadBalancerSKU != nil {
+			upstreamSpec.LoadBalancerSKU = azcoreto.Ptr(string(*networkProfile.LoadBalancerSKU))
+		}
 	}
 
 	// set linux account profile
-	linuxProfile := clusterState.LinuxProfile
+	linuxProfile := clusterState.Properties.LinuxProfile
 	if linuxProfile != nil {
 		upstreamSpec.LinuxAdminUsername = linuxProfile.AdminUsername
-		sshKeys := *linuxProfile.SSH.PublicKeys
+		sshKeys := linuxProfile.SSH.PublicKeys
 		upstreamSpec.LinuxSSHPublicKey = sshKeys[0].KeyData
 	}
 
 	// set addons profile
-	addonProfile := clusterState.AddonProfiles
+	addonProfile := clusterState.Properties.AddonProfiles
 	if addonProfile != nil && addonProfile["httpApplicationRouting"] != nil {
 		upstreamSpec.HTTPApplicationRouting = addonProfile["httpApplicationRouting"].Enabled
 	}
@@ -681,27 +691,27 @@ func (h *Handler) buildUpstreamClusterState(ctx context.Context, credentials *ak
 			return nil, fmt.Errorf("OMS Agent configuration workspace group was not found")
 		}
 		logAnalyticsWorkspaceGroup := group[1]
-		upstreamSpec.LogAnalyticsWorkspaceGroup = to.StringPtr(logAnalyticsWorkspaceGroup)
+		upstreamSpec.LogAnalyticsWorkspaceGroup = azcoreto.Ptr(logAnalyticsWorkspaceGroup)
 
 		name := matchWorkspaceName.FindStringSubmatch(to.String(logAnalyticsWorkspaceResourceID))
 		if name == nil {
 			return nil, fmt.Errorf("OMS Agent configuration workspace name was not found")
 		}
 		logAnalyticsWorkspaceName := name[1]
-		upstreamSpec.LogAnalyticsWorkspaceName = to.StringPtr(logAnalyticsWorkspaceName)
+		upstreamSpec.LogAnalyticsWorkspaceName = azcoreto.Ptr(logAnalyticsWorkspaceName)
 	}
 
 	// set API server access profile
 	upstreamSpec.PrivateCluster = to.BoolPtr(false)
-	if clusterState.APIServerAccessProfile != nil {
-		if clusterState.APIServerAccessProfile.EnablePrivateCluster != nil {
-			upstreamSpec.PrivateCluster = clusterState.APIServerAccessProfile.EnablePrivateCluster
+	if clusterState.Properties.APIServerAccessProfile != nil {
+		if clusterState.Properties.APIServerAccessProfile.EnablePrivateCluster != nil {
+			upstreamSpec.PrivateCluster = clusterState.Properties.APIServerAccessProfile.EnablePrivateCluster
 		}
-		if clusterState.APIServerAccessProfile.AuthorizedIPRanges != nil && *clusterState.APIServerAccessProfile.AuthorizedIPRanges != nil {
-			upstreamSpec.AuthorizedIPRanges = clusterState.APIServerAccessProfile.AuthorizedIPRanges
+		if clusterState.Properties.APIServerAccessProfile.AuthorizedIPRanges != nil {
+			upstreamSpec.AuthorizedIPRanges = utils.ConvertToPointerOfSlice(clusterState.Properties.APIServerAccessProfile.AuthorizedIPRanges)
 		}
-		if clusterState.APIServerAccessProfile.PrivateDNSZone != nil {
-			upstreamSpec.PrivateDNSZone = clusterState.APIServerAccessProfile.PrivateDNSZone
+		if clusterState.Properties.APIServerAccessProfile.PrivateDNSZone != nil {
+			upstreamSpec.PrivateDNSZone = clusterState.Properties.APIServerAccessProfile.PrivateDNSZone
 		}
 	}
 	upstreamSpec.ManagedIdentity = to.BoolPtr(false)
@@ -709,7 +719,7 @@ func (h *Handler) buildUpstreamClusterState(ctx context.Context, credentials *ak
 		upstreamSpec.ManagedIdentity = to.BoolPtr(true)
 		if clusterState.Identity.UserAssignedIdentities != nil {
 			for userAssignedID := range clusterState.Identity.UserAssignedIdentities {
-				upstreamSpec.UserAssignedIdentity = to.StringPtr(userAssignedID)
+				upstreamSpec.UserAssignedIdentity = azcoreto.Ptr(userAssignedID)
 			}
 		}
 	}
@@ -724,10 +734,11 @@ func (h *Handler) updateUpstreamClusterState(ctx context.Context, config *aksv1.
 	if config.Spec.Tags != nil {
 		if !reflect.DeepEqual(config.Spec.Tags, upstreamSpec.Tags) {
 			logrus.Infof("Updating tags for cluster [%s]", config.Spec.ClusterName)
-			tags := containerservice.TagsObject{
+			tags := armcontainerservice.TagsObject{
 				Tags: *to.StringMapPtr(config.Spec.Tags),
 			}
-			response, err := h.azureClients.clustersClient.UpdateTags(ctx, config.Spec.ResourceGroup, config.Spec.ClusterName, tags)
+
+			poller, err := h.azureClients.clustersClient.BeginUpdateTags(ctx, config.Spec.ResourceGroup, config.Spec.ClusterName, tags, nil)
 			if err != nil {
 				return config, err
 			}
@@ -736,18 +747,21 @@ func (h *Handler) updateUpstreamClusterState(ctx context.Context, config *aksv1.
 			// have a good way to detect that policy. We handle this case by checking if Azure returns an unexpected
 			// state for the tags and if so, log the response and move on. Any upstream tags regenerated on the cluster
 			// by Azure will be synced back to rancher.
-			upstreamTags := containerservice.TagsObject{}
-			if err := retry.OnError(retry.DefaultBackoff, func(err error) bool {
-				return strings.HasSuffix(err.Error(), "asynchronous operation has not completed")
-			}, func() error {
-				managedCluster, err := h.azureClients.clustersClient.AsyncUpdateTagsResult(response)
-				upstreamTags.Tags = managedCluster.Tags
-				return err
-			}); err != nil {
+			var response *http.Response
+			upstreamTags := armcontainerservice.TagsObject{}
+			if err := retry.OnError(retry.DefaultBackoff,
+				func(err error) bool {
+					return strings.HasSuffix(err.Error(), "asynchronous operation has not completed")
+				},
+				func() error {
+					resp, err := poller.PollUntilDone(runtime.WithCaptureResponse(ctx, &response), nil)
+					upstreamTags.Tags = resp.Tags
+					return err
+				}); err != nil {
 				return config, fmt.Errorf("failed to update tags for cluster [%s]: %w", config.Spec.ClusterName, err)
 			}
 
-			if !reflect.DeepEqual(tags, upstreamTags) && response.Response().StatusCode == http.StatusOK {
+			if !reflect.DeepEqual(tags, upstreamTags) && response.StatusCode == http.StatusOK {
 				logrus.Infof("Tags were not updated as expected for cluster [%s], expected %s, actual %s, moving on", config.Spec.ClusterName, to.StringMap(tags.Tags), to.StringMap(upstreamTags.Tags))
 			} else {
 				return h.enqueueUpdate(config)
@@ -946,11 +960,6 @@ func (h *Handler) getAzureClients(config *aksv1.AKSClusterConfig) error {
 		return fmt.Errorf("error getting credentials: %w", err)
 	}
 
-	authorizer, err := aks.NewClientAuthorizer(credentials)
-	if err != nil {
-		return fmt.Errorf("error creating authorizer: %w", err)
-	}
-
 	//TODO: Determine which Azure Cloud to use
 	cloud := cloud.AzurePublic
 	clientSecretCredential, err := aks.NewClientSecretCredential(credentials, cloud)
@@ -958,7 +967,7 @@ func (h *Handler) getAzureClients(config *aksv1.AKSClusterConfig) error {
 		return fmt.Errorf("error creating client secret credential: %w", err)
 	}
 
-	clustersClient, err := services.NewManagedClustersClient(authorizer, *credentials.BaseURL, credentials.SubscriptionID, clientSecretCredential, cloud)
+	clustersClient, err := services.NewManagedClustersClient(credentials.SubscriptionID, clientSecretCredential, cloud)
 	if err != nil {
 		return fmt.Errorf("error creating managed cluster client: %w", err)
 	}
@@ -970,7 +979,7 @@ func (h *Handler) getAzureClients(config *aksv1.AKSClusterConfig) error {
 	if err != nil {
 		return fmt.Errorf("error creating agent pool client: %w", err)
 	}
-	workplacesClient, err := services.NewWorkplacesClient(authorizer, *credentials.BaseURL, credentials.SubscriptionID, clientSecretCredential, cloud)
+	workplacesClient, err := services.NewWorkplacesClient(credentials.SubscriptionID, clientSecretCredential, cloud)
 	if err != nil {
 		return fmt.Errorf("error creating workplace client: %w", err)
 	}

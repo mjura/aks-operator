@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"strings"
 
-	azcoreto "github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v4"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources"
 	"github.com/Azure/azure-sdk-for-go/services/containerservice/mgmt/2020-11-01/containerservice"
-	"github.com/Azure/go-autorest/autorest/to"
+	autorestto "github.com/Azure/go-autorest/autorest/to"
 	"github.com/rancher/aks-operator/pkg/aks/services"
 	aksv1 "github.com/rancher/aks-operator/pkg/apis/aks.cattle.io/v1"
+	"github.com/rancher/aks-operator/pkg/utils"
 	"github.com/sirupsen/logrus"
 )
 
@@ -20,13 +21,14 @@ const (
 )
 
 func CreateResourceGroup(ctx context.Context, groupsClient services.ResourceGroupsClientInterface, spec *aksv1.AKSClusterConfigSpec) error {
-	err := groupsClient.CreateOrUpdate(
+	_, err := groupsClient.CreateOrUpdate(
 		ctx,
 		spec.ResourceGroup,
 		armresources.ResourceGroup{
-			Name:     azcoreto.Ptr(spec.ResourceGroup),
-			Location: azcoreto.Ptr(spec.ResourceLocation),
+			Name:     to.Ptr(spec.ResourceGroup),
+			Location: to.Ptr(spec.ResourceLocation),
 		},
+		nil,
 	)
 	return err
 }
@@ -40,22 +42,23 @@ func CreateCluster(ctx context.Context, cred *Credentials, clusterClient service
 		return err
 	}
 
-	_, err = clusterClient.CreateOrUpdate(
+	_, err = clusterClient.BeginCreateOrUpdate(
 		ctx,
 		spec.ResourceGroup,
 		spec.ClusterName,
 		*managedCluster,
+		nil,
 	)
 
 	return err
 }
 
 // createManagedCluster creates a new managed Kubernetes cluster.
-func createManagedCluster(ctx context.Context, cred *Credentials, workplacesClient services.WorkplacesClientInterface, spec *aksv1.AKSClusterConfigSpec, phase string) (*containerservice.ManagedCluster, error) {
-	managedCluster := &containerservice.ManagedCluster{
-		Name:     to.StringPtr(spec.ClusterName),
-		Location: to.StringPtr(spec.ResourceLocation),
-		ManagedClusterProperties: &containerservice.ManagedClusterProperties{
+func createManagedCluster(ctx context.Context, cred *Credentials, workplacesClient services.WorkplacesClientInterface, spec *aksv1.AKSClusterConfigSpec, phase string) (*armcontainerservice.ManagedCluster, error) {
+	managedCluster := &armcontainerservice.ManagedCluster{
+		Name:     to.Ptr(spec.ClusterName),
+		Location: to.Ptr(spec.ResourceLocation),
+		Properties: &armcontainerservice.ManagedClusterProperties{
 			KubernetesVersion: spec.KubernetesVersion,
 		},
 	}
@@ -63,13 +66,13 @@ func createManagedCluster(ctx context.Context, cred *Credentials, workplacesClie
 	managedCluster.Tags = make(map[string]*string)
 	for key, val := range spec.Tags {
 		if val != "" {
-			managedCluster.Tags[key] = to.StringPtr(val)
+			managedCluster.Tags[key] = to.Ptr(val)
 		}
 	}
 
 	nodeResourceGroupName := ""
-	if to.String(spec.NodeResourceGroup) != "" {
-		nodeResourceGroupName = to.String(spec.NodeResourceGroup)
+	if autorestto.String(spec.NodeResourceGroup) != "" {
+		nodeResourceGroupName = autorestto.String(spec.NodeResourceGroup)
 	} else {
 		nodeResourceGroupName = fmt.Sprintf("MC_%s_%s_%s", spec.ResourceGroup, spec.ClusterName, spec.ResourceLocation)
 		if len(nodeResourceGroupName) > maxNodeResourceGroupNameLength {
@@ -77,133 +80,133 @@ func createManagedCluster(ctx context.Context, cred *Credentials, workplacesClie
 			nodeResourceGroupName = nodeResourceGroupName[:maxNodeResourceGroupNameLength]
 		}
 	}
-	managedCluster.ManagedClusterProperties.NodeResourceGroup = to.StringPtr(nodeResourceGroupName)
+	managedCluster.Properties.NodeResourceGroup = to.Ptr(nodeResourceGroupName)
 
-	networkProfile := &containerservice.NetworkProfile{}
+	networkProfile := &armcontainerservice.NetworkProfile{}
 
-	switch to.String(spec.OutboundType) {
+	switch autorestto.String(spec.OutboundType) {
 	case string(containerservice.LoadBalancer):
-		networkProfile.OutboundType = containerservice.LoadBalancer
+		networkProfile.OutboundType = to.Ptr(armcontainerservice.OutboundTypeLoadBalancer)
 	case string(containerservice.UserDefinedRouting):
-		networkProfile.OutboundType = containerservice.UserDefinedRouting
+		networkProfile.OutboundType = to.Ptr(armcontainerservice.OutboundTypeUserDefinedRouting)
 	case "":
-		networkProfile.OutboundType = containerservice.LoadBalancer
+		networkProfile.OutboundType = to.Ptr(armcontainerservice.OutboundTypeLoadBalancer)
 	}
 
-	switch to.String(spec.NetworkPolicy) {
+	switch autorestto.String(spec.NetworkPolicy) {
 	case string(containerservice.NetworkPolicyAzure):
-		networkProfile.NetworkPolicy = containerservice.NetworkPolicyAzure
+		networkProfile.NetworkPolicy = to.Ptr(armcontainerservice.NetworkPolicyAzure)
 	case string(containerservice.NetworkPolicyCalico):
-		networkProfile.NetworkPolicy = containerservice.NetworkPolicyCalico
+		networkProfile.NetworkPolicy = to.Ptr(armcontainerservice.NetworkPolicyCalico)
 	case "":
-		networkProfile.NetworkPolicy = ""
+		networkProfile.NetworkPolicy = nil
 	default:
-		return nil, fmt.Errorf("networkPolicy '%s' is not supported", to.String(spec.NetworkPolicy))
+		return nil, fmt.Errorf("networkPolicy '%s' is not supported", autorestto.String(spec.NetworkPolicy))
 	}
 
-	switch to.String(spec.NetworkPlugin) {
+	switch autorestto.String(spec.NetworkPlugin) {
 	case string(containerservice.Azure):
-		networkProfile.NetworkPlugin = containerservice.Azure
+		networkProfile.NetworkPlugin = to.Ptr(armcontainerservice.NetworkPluginAzure)
 	case string(containerservice.Kubenet):
-		networkProfile.NetworkPlugin = containerservice.Kubenet
+		networkProfile.NetworkPlugin = to.Ptr(armcontainerservice.NetworkPluginKubenet)
 	case "":
-		networkProfile.NetworkPlugin = containerservice.Kubenet
+		networkProfile.NetworkPlugin = to.Ptr(armcontainerservice.NetworkPluginKubenet)
 	default:
-		return nil, fmt.Errorf("networkPlugin '%s' is not supported", to.String(spec.NetworkPlugin))
+		return nil, fmt.Errorf("networkPlugin '%s' is not supported", autorestto.String(spec.NetworkPlugin))
 	}
 
-	if networkProfile.NetworkPlugin == containerservice.Kubenet && to.String(spec.NetworkPolicy) == string(containerservice.NetworkPolicyAzure) {
+	if *networkProfile.NetworkPlugin == armcontainerservice.NetworkPluginKubenet && autorestto.String(spec.NetworkPolicy) == string(containerservice.NetworkPolicyAzure) {
 		return nil, fmt.Errorf("network plugin Kubenet is not compatible with network policy Azure")
 	}
 
-	networkProfile.LoadBalancerSku = containerservice.Standard
+	networkProfile.LoadBalancerSKU = to.Ptr(armcontainerservice.LoadBalancerSKUStandard)
 
-	if to.String(spec.LoadBalancerSKU) == string(containerservice.Basic) {
+	if autorestto.String(spec.LoadBalancerSKU) == string(containerservice.Basic) {
 		logrus.Warnf("loadBalancerSKU 'basic' is not supported")
-		networkProfile.LoadBalancerSku = containerservice.Basic
+		networkProfile.LoadBalancerSKU = to.Ptr(armcontainerservice.LoadBalancerSKUBasic)
 	}
 
 	// Disable standard loadbalancer for UserDefinedRouting and use routing created by user pre-defined table for egress
-	if to.String(spec.OutboundType) == string(containerservice.UserDefinedRouting) {
-		networkProfile.LoadBalancerSku = ""
+	if autorestto.String(spec.OutboundType) == string(containerservice.UserDefinedRouting) {
+		networkProfile.LoadBalancerSKU = nil
 	}
 
 	virtualNetworkResourceGroup := spec.ResourceGroup
-	if containerservice.NetworkPlugin(to.String(spec.NetworkPlugin)) == containerservice.Azure || containerservice.NetworkPlugin(to.String(spec.NetworkPlugin)) == containerservice.Kubenet {
+	if containerservice.NetworkPlugin(autorestto.String(spec.NetworkPlugin)) == containerservice.Azure || containerservice.NetworkPlugin(autorestto.String(spec.NetworkPlugin)) == containerservice.Kubenet {
 		// If a virtual network resource group is set, use it, otherwise assume it is the same as the cluster
-		if to.String(spec.VirtualNetworkResourceGroup) != "" {
-			virtualNetworkResourceGroup = to.String(spec.VirtualNetworkResourceGroup)
+		if autorestto.String(spec.VirtualNetworkResourceGroup) != "" {
+			virtualNetworkResourceGroup = autorestto.String(spec.VirtualNetworkResourceGroup)
 		}
 
+		// Setting the DockerBridgeCidr field is no longer supported, see https://github.com/Azure/AKS/issues/3534
 		networkProfile.DNSServiceIP = spec.NetworkDNSServiceIP
-		networkProfile.DockerBridgeCidr = spec.NetworkDockerBridgeCIDR
 		networkProfile.ServiceCidr = spec.NetworkServiceCIDR
 		networkProfile.PodCidr = spec.NetworkPodCIDR
 	}
-	managedCluster.ManagedClusterProperties.NetworkProfile = networkProfile
+	managedCluster.Properties.NetworkProfile = networkProfile
 
-	agentPoolProfiles := []containerservice.ManagedClusterAgentPoolProfile{}
+	agentPoolProfiles := []*armcontainerservice.ManagedClusterAgentPoolProfile{}
 	for _, np := range spec.NodePools {
-		agentProfile := containerservice.ManagedClusterAgentPoolProfile{
+		agentProfile := &armcontainerservice.ManagedClusterAgentPoolProfile{
 			Name:         np.Name,
 			Count:        np.Count,
 			MaxPods:      np.MaxPods,
-			OsDiskSizeGB: np.OsDiskSizeGB,
-			OsDiskType:   containerservice.OSDiskType(np.OsDiskType),
-			OsType:       containerservice.OSType(np.OsType),
-			VMSize:       containerservice.VMSizeTypes(np.VMSize),
-			Mode:         containerservice.AgentPoolMode(np.Mode),
+			OSDiskSizeGB: np.OsDiskSizeGB,
+			OSDiskType:   to.Ptr(armcontainerservice.OSDiskType(np.OsDiskType)),
+			OSType:       to.Ptr(armcontainerservice.OSType(np.OsType)),
+			VMSize:       to.Ptr(np.VMSize),
+			Mode:         to.Ptr(armcontainerservice.AgentPoolMode(np.Mode)),
 			NodeLabels:   np.NodeLabels,
-			NodeTaints:   np.NodeTaints,
+			NodeTaints:   utils.ConvertToSliceOfPointers(np.NodeTaints),
 		}
 
 		if np.MaxSurge != nil {
-			agentProfile.UpgradeSettings = &containerservice.AgentPoolUpgradeSettings{
+			agentProfile.UpgradeSettings = &armcontainerservice.AgentPoolUpgradeSettings{
 				MaxSurge: np.MaxSurge,
 			}
 		}
 
 		if np.NodeTaints != nil && len(*np.NodeTaints) > 0 {
-			agentProfile.NodeTaints = np.NodeTaints
+			agentProfile.NodeTaints = utils.ConvertToSliceOfPointers(np.NodeTaints)
 		}
 
 		agentProfile.OrchestratorVersion = spec.KubernetesVersion
-		if to.String(np.OrchestratorVersion) != "" {
+		if autorestto.String(np.OrchestratorVersion) != "" {
 			agentProfile.OrchestratorVersion = np.OrchestratorVersion
 		}
 		if np.AvailabilityZones != nil && len(*np.AvailabilityZones) > 0 {
-			agentProfile.AvailabilityZones = np.AvailabilityZones
+			agentProfile.AvailabilityZones = utils.ConvertToSliceOfPointers(np.AvailabilityZones)
 		}
 
-		if to.StringSlice(np.AvailabilityZones) != nil {
-			agentProfile.AvailabilityZones = np.AvailabilityZones
+		if autorestto.StringSlice(np.AvailabilityZones) != nil {
+			agentProfile.AvailabilityZones = utils.ConvertToSliceOfPointers(np.AvailabilityZones)
 		}
 
-		if to.Bool(np.EnableAutoScaling) {
+		if autorestto.Bool(np.EnableAutoScaling) {
 			agentProfile.EnableAutoScaling = np.EnableAutoScaling
 			agentProfile.MaxCount = np.MaxCount
 			agentProfile.MinCount = np.MinCount
 		}
 
 		if hasCustomVirtualNetwork(spec) {
-			agentProfile.VnetSubnetID = to.StringPtr(fmt.Sprintf(
+			agentProfile.VnetSubnetID = to.Ptr(fmt.Sprintf(
 				"/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Network/virtualNetworks/%s/subnets/%s",
 				cred.SubscriptionID,
 				virtualNetworkResourceGroup,
-				to.String(spec.VirtualNetwork),
-				to.String(spec.Subnet),
+				autorestto.String(spec.VirtualNetwork),
+				autorestto.String(spec.Subnet),
 			))
 		}
 
 		agentPoolProfiles = append(agentPoolProfiles, agentProfile)
 	}
-	managedCluster.ManagedClusterProperties.AgentPoolProfiles = &agentPoolProfiles
+	managedCluster.Properties.AgentPoolProfiles = agentPoolProfiles
 
 	if hasLinuxProfile(spec) {
-		managedCluster.ManagedClusterProperties.LinuxProfile = &containerservice.LinuxProfile{
+		managedCluster.Properties.LinuxProfile = &armcontainerservice.LinuxProfile{
 			AdminUsername: spec.LinuxAdminUsername,
-			SSH: &containerservice.SSHConfiguration{
-				PublicKeys: &[]containerservice.SSHPublicKey{
+			SSH: &armcontainerservice.SSHConfiguration{
+				PublicKeys: []*armcontainerservice.SSHPublicKey{
 					{
 						KeyData: spec.LinuxSSHPublicKey,
 					},
@@ -213,22 +216,22 @@ func createManagedCluster(ctx context.Context, cred *Credentials, workplacesClie
 	}
 
 	// Get addon profile from config spec
-	managedCluster.ManagedClusterProperties.AddonProfiles = map[string]*containerservice.ManagedClusterAddonProfile{}
+	managedCluster.Properties.AddonProfiles = map[string]*armcontainerservice.ManagedClusterAddonProfile{}
 
 	if hasHTTPApplicationRoutingSupport(spec) {
-		managedCluster.ManagedClusterProperties.AddonProfiles["httpApplicationRouting"] = &containerservice.ManagedClusterAddonProfile{
+		managedCluster.Properties.AddonProfiles["httpApplicationRouting"] = &armcontainerservice.ManagedClusterAddonProfile{
 			Enabled: spec.HTTPApplicationRouting,
 		}
 	}
 
 	// Get monitoring from config spec
-	if to.Bool(spec.Monitoring) {
-		managedCluster.ManagedClusterProperties.AddonProfiles["omsAgent"] = &containerservice.ManagedClusterAddonProfile{
+	if autorestto.Bool(spec.Monitoring) {
+		managedCluster.Properties.AddonProfiles["omsAgent"] = &armcontainerservice.ManagedClusterAddonProfile{
 			Enabled: spec.Monitoring,
 		}
 
 		logAnalyticsWorkspaceResourceID, err := CheckLogAnalyticsWorkspaceForMonitoring(ctx, workplacesClient,
-			spec.ResourceLocation, spec.ResourceGroup, to.String(spec.LogAnalyticsWorkspaceGroup), to.String(spec.LogAnalyticsWorkspaceName))
+			spec.ResourceLocation, spec.ResourceGroup, autorestto.String(spec.LogAnalyticsWorkspaceGroup), autorestto.String(spec.LogAnalyticsWorkspaceName))
 		if err != nil {
 			return nil, err
 		}
@@ -238,56 +241,55 @@ func createManagedCluster(ctx context.Context, cred *Credentials, workplacesClie
 		}
 		logAnalyticsWorkspaceResourceID = strings.TrimSuffix(logAnalyticsWorkspaceResourceID, "/")
 
-		managedCluster.ManagedClusterProperties.AddonProfiles["omsAgent"].Config = map[string]*string{
-			"logAnalyticsWorkspaceResourceID": to.StringPtr(logAnalyticsWorkspaceResourceID),
+		managedCluster.Properties.AddonProfiles["omsAgent"].Config = map[string]*string{
+			"logAnalyticsWorkspaceResourceID": to.Ptr(logAnalyticsWorkspaceResourceID),
 		}
 	}
 
 	if phase != "updating" && phase != "active" {
-		managedCluster.ServicePrincipalProfile = &containerservice.ManagedClusterServicePrincipalProfile{
-			ClientID: to.StringPtr(cred.ClientID),
-			Secret:   to.StringPtr(cred.ClientSecret),
+		managedCluster.Properties.ServicePrincipalProfile = &armcontainerservice.ManagedClusterServicePrincipalProfile{
+			ClientID: to.Ptr(cred.ClientID),
+			Secret:   to.Ptr(cred.ClientSecret),
 		}
 	}
 
-	if to.String(spec.DNSPrefix) != "" {
-		managedCluster.DNSPrefix = spec.DNSPrefix
+	if autorestto.String(spec.DNSPrefix) != "" {
+		managedCluster.Properties.DNSPrefix = spec.DNSPrefix
 	}
 
 	if spec.AuthorizedIPRanges != nil {
-		if managedCluster.APIServerAccessProfile == nil {
-			managedCluster.APIServerAccessProfile = &containerservice.ManagedClusterAPIServerAccessProfile{}
+		if managedCluster.Properties.APIServerAccessProfile == nil {
+			managedCluster.Properties.APIServerAccessProfile = &armcontainerservice.ManagedClusterAPIServerAccessProfile{}
 		}
-		managedCluster.APIServerAccessProfile.AuthorizedIPRanges = spec.AuthorizedIPRanges
+		managedCluster.Properties.APIServerAccessProfile.AuthorizedIPRanges = utils.ConvertToSliceOfPointers(spec.AuthorizedIPRanges)
 	}
 
-	if to.Bool(spec.PrivateCluster) {
-		if managedCluster.APIServerAccessProfile == nil {
-			managedCluster.APIServerAccessProfile = &containerservice.ManagedClusterAPIServerAccessProfile{}
+	if autorestto.Bool(spec.PrivateCluster) {
+		if managedCluster.Properties.APIServerAccessProfile == nil {
+			managedCluster.Properties.APIServerAccessProfile = &armcontainerservice.ManagedClusterAPIServerAccessProfile{}
 		}
-		managedCluster.APIServerAccessProfile.EnablePrivateCluster = spec.PrivateCluster
+		managedCluster.Properties.APIServerAccessProfile.EnablePrivateCluster = spec.PrivateCluster
 		// Private DNS Zone ID can be set only for private cluster
 		if spec.PrivateDNSZone != nil {
-			managedCluster.APIServerAccessProfile.PrivateDNSZone = spec.PrivateDNSZone
+			managedCluster.Properties.APIServerAccessProfile.PrivateDNSZone = spec.PrivateDNSZone
 		}
 	}
 
 	if cred.TenantID != "" {
-		managedCluster.Identity = &containerservice.ManagedClusterIdentity{
-			TenantID: to.StringPtr(cred.TenantID),
-			Type:     containerservice.ResourceIdentityTypeSystemAssigned,
+		managedCluster.Identity = &armcontainerservice.ManagedClusterIdentity{
+			Type: to.Ptr(armcontainerservice.ResourceIdentityTypeSystemAssigned),
 		}
 	}
 
-	if to.Bool(spec.ManagedIdentity) {
-		managedCluster.Identity = &containerservice.ManagedClusterIdentity{
-			Type: containerservice.ResourceIdentityTypeSystemAssigned,
+	if autorestto.Bool(spec.ManagedIdentity) {
+		managedCluster.Identity = &armcontainerservice.ManagedClusterIdentity{
+			Type: to.Ptr(armcontainerservice.ResourceIdentityTypeSystemAssigned),
 		}
 		if spec.UserAssignedIdentity != nil {
-			managedCluster.Identity = &containerservice.ManagedClusterIdentity{
-				Type: containerservice.ResourceIdentityTypeUserAssigned,
-				UserAssignedIdentities: map[string]*containerservice.ManagedClusterIdentityUserAssignedIdentitiesValue{
-					to.String(spec.UserAssignedIdentity): {},
+			managedCluster.Identity = &armcontainerservice.ManagedClusterIdentity{
+				Type: to.Ptr(armcontainerservice.ResourceIdentityTypeUserAssigned),
+				UserAssignedIdentities: map[string]*armcontainerservice.ManagedServiceIdentityUserAssignedIdentitiesValue{
+					autorestto.String(spec.UserAssignedIdentity): {},
 				},
 			}
 		}
@@ -303,19 +305,19 @@ func CreateOrUpdateAgentPool(ctx context.Context, agentPoolClient services.Agent
 		Count:               np.Count,
 		MaxPods:             np.MaxPods,
 		OSDiskSizeGB:        np.OsDiskSizeGB,
-		OSDiskType:          azcoreto.Ptr(armcontainerservice.OSDiskType(np.OsDiskType)),
-		OSType:              azcoreto.Ptr(armcontainerservice.OSType(np.OsType)),
-		VMSize:              azcoreto.Ptr(np.VMSize),
-		Mode:                azcoreto.Ptr(armcontainerservice.AgentPoolMode(np.Mode)),
-		Type:                azcoreto.Ptr(armcontainerservice.AgentPoolTypeVirtualMachineScaleSets),
+		OSDiskType:          to.Ptr(armcontainerservice.OSDiskType(np.OsDiskType)),
+		OSType:              to.Ptr(armcontainerservice.OSType(np.OsType)),
+		VMSize:              to.Ptr(np.VMSize),
+		Mode:                to.Ptr(armcontainerservice.AgentPoolMode(np.Mode)),
+		Type:                to.Ptr(armcontainerservice.AgentPoolTypeVirtualMachineScaleSets),
 		OrchestratorVersion: np.OrchestratorVersion,
-		AvailabilityZones:   convertToSliceOfPointers(np.AvailabilityZones),
+		AvailabilityZones:   utils.ConvertToSliceOfPointers(np.AvailabilityZones),
 		EnableAutoScaling:   np.EnableAutoScaling,
 		MinCount:            np.MinCount,
 		MaxCount:            np.MaxCount,
 		VnetSubnetID:        np.VnetSubnetID,
 		NodeLabels:          np.NodeLabels,
-		NodeTaints:          convertToSliceOfPointers(np.NodeTaints),
+		NodeTaints:          utils.ConvertToSliceOfPointers(np.NodeTaints),
 	}
 
 	if np.MaxSurge != nil {
@@ -324,7 +326,7 @@ func CreateOrUpdateAgentPool(ctx context.Context, agentPoolClient services.Agent
 		}
 	}
 
-	_, err := agentPoolClient.BeginCreateOrUpdate(ctx, spec.ResourceGroup, spec.ClusterName, to.String(np.Name), armcontainerservice.AgentPool{
+	_, err := agentPoolClient.BeginCreateOrUpdate(ctx, spec.ResourceGroup, spec.ClusterName, autorestto.String(np.Name), armcontainerservice.AgentPool{
 		Properties: agentProfile,
 	})
 
@@ -342,15 +344,4 @@ func hasLinuxProfile(spec *aksv1.AKSClusterConfigSpec) bool {
 func hasHTTPApplicationRoutingSupport(spec *aksv1.AKSClusterConfigSpec) bool {
 	// HttpApplicationRouting is not supported in azure china cloud
 	return !strings.HasPrefix(spec.ResourceLocation, "china")
-}
-
-func convertToSliceOfPointers[T any](slicePtr *[]T) []*T {
-	var ret []*T
-	if slicePtr == nil {
-		return ret
-	}
-	for _, v := range *slicePtr {
-		ret = append(ret, azcoreto.Ptr(v))
-	}
-	return ret
 }

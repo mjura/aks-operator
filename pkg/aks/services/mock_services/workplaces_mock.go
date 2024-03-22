@@ -13,7 +13,8 @@ import (
 	context "context"
 	reflect "reflect"
 
-	operationalinsights "github.com/Azure/azure-sdk-for-go/services/operationalinsights/mgmt/2020-08-01/operationalinsights"
+	armoperationalinsights "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/operationalinsights/armoperationalinsights"
+	services "github.com/rancher/aks-operator/pkg/aks/services"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -40,47 +41,32 @@ func (m *MockWorkplacesClientInterface) EXPECT() *MockWorkplacesClientInterfaceM
 	return m.recorder
 }
 
-// AsyncCreateUpdateResult mocks base method.
-func (m *MockWorkplacesClientInterface) AsyncCreateUpdateResult(asyncRet operationalinsights.WorkspacesCreateOrUpdateFuture) (operationalinsights.Workspace, error) {
+// BeginCreateOrUpdate mocks base method.
+func (m *MockWorkplacesClientInterface) BeginCreateOrUpdate(ctx context.Context, resourceGroupName, workspaceName string, parameters armoperationalinsights.Workspace, options *armoperationalinsights.WorkspacesClientBeginCreateOrUpdateOptions) (services.Poller[armoperationalinsights.WorkspacesClientCreateOrUpdateResponse], error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AsyncCreateUpdateResult", asyncRet)
-	ret0, _ := ret[0].(operationalinsights.Workspace)
+	ret := m.ctrl.Call(m, "BeginCreateOrUpdate", ctx, resourceGroupName, workspaceName, parameters, options)
+	ret0, _ := ret[0].(services.Poller[armoperationalinsights.WorkspacesClientCreateOrUpdateResponse])
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// AsyncCreateUpdateResult indicates an expected call of AsyncCreateUpdateResult.
-func (mr *MockWorkplacesClientInterfaceMockRecorder) AsyncCreateUpdateResult(asyncRet any) *gomock.Call {
+// BeginCreateOrUpdate indicates an expected call of BeginCreateOrUpdate.
+func (mr *MockWorkplacesClientInterfaceMockRecorder) BeginCreateOrUpdate(ctx, resourceGroupName, workspaceName, parameters, options any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AsyncCreateUpdateResult", reflect.TypeOf((*MockWorkplacesClientInterface)(nil).AsyncCreateUpdateResult), asyncRet)
-}
-
-// CreateOrUpdate mocks base method.
-func (m *MockWorkplacesClientInterface) CreateOrUpdate(ctx context.Context, resourceGroupName, workspaceName string, parameters operationalinsights.Workspace) (operationalinsights.WorkspacesCreateOrUpdateFuture, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateOrUpdate", ctx, resourceGroupName, workspaceName, parameters)
-	ret0, _ := ret[0].(operationalinsights.WorkspacesCreateOrUpdateFuture)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// CreateOrUpdate indicates an expected call of CreateOrUpdate.
-func (mr *MockWorkplacesClientInterfaceMockRecorder) CreateOrUpdate(ctx, resourceGroupName, workspaceName, parameters any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrUpdate", reflect.TypeOf((*MockWorkplacesClientInterface)(nil).CreateOrUpdate), ctx, resourceGroupName, workspaceName, parameters)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BeginCreateOrUpdate", reflect.TypeOf((*MockWorkplacesClientInterface)(nil).BeginCreateOrUpdate), ctx, resourceGroupName, workspaceName, parameters, options)
 }
 
 // Get mocks base method.
-func (m *MockWorkplacesClientInterface) Get(ctx context.Context, resourceGroupName, workspaceName string) (operationalinsights.Workspace, error) {
+func (m *MockWorkplacesClientInterface) Get(ctx context.Context, resourceGroupName, workspaceName string, options *armoperationalinsights.WorkspacesClientGetOptions) (armoperationalinsights.WorkspacesClientGetResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Get", ctx, resourceGroupName, workspaceName)
-	ret0, _ := ret[0].(operationalinsights.Workspace)
+	ret := m.ctrl.Call(m, "Get", ctx, resourceGroupName, workspaceName, options)
+	ret0, _ := ret[0].(armoperationalinsights.WorkspacesClientGetResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Get indicates an expected call of Get.
-func (mr *MockWorkplacesClientInterfaceMockRecorder) Get(ctx, resourceGroupName, workspaceName any) *gomock.Call {
+func (mr *MockWorkplacesClientInterfaceMockRecorder) Get(ctx, resourceGroupName, workspaceName, options any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockWorkplacesClientInterface)(nil).Get), ctx, resourceGroupName, workspaceName)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockWorkplacesClientInterface)(nil).Get), ctx, resourceGroupName, workspaceName, options)
 }

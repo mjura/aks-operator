@@ -13,6 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	runtime "github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	armresources "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -40,31 +41,47 @@ func (m *MockResourceGroupsClientInterface) EXPECT() *MockResourceGroupsClientIn
 	return m.recorder
 }
 
-// CheckExistence mocks base method.
-func (m *MockResourceGroupsClientInterface) CheckExistence(ctx context.Context, resourceGroupName string) (armresources.ResourceGroupsClientCheckExistenceResponse, error) {
+// BeginDelete mocks base method.
+func (m *MockResourceGroupsClientInterface) BeginDelete(ctx context.Context, resourceGroupName string, options *armresources.ResourceGroupsClientBeginDeleteOptions) (*runtime.Poller[armresources.ResourceGroupsClientDeleteResponse], error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CheckExistence", ctx, resourceGroupName)
+	ret := m.ctrl.Call(m, "BeginDelete", ctx, resourceGroupName, options)
+	ret0, _ := ret[0].(*runtime.Poller[armresources.ResourceGroupsClientDeleteResponse])
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// BeginDelete indicates an expected call of BeginDelete.
+func (mr *MockResourceGroupsClientInterfaceMockRecorder) BeginDelete(ctx, resourceGroupName, options any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BeginDelete", reflect.TypeOf((*MockResourceGroupsClientInterface)(nil).BeginDelete), ctx, resourceGroupName, options)
+}
+
+// CheckExistence mocks base method.
+func (m *MockResourceGroupsClientInterface) CheckExistence(ctx context.Context, resourceGroupName string, options *armresources.ResourceGroupsClientCheckExistenceOptions) (armresources.ResourceGroupsClientCheckExistenceResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CheckExistence", ctx, resourceGroupName, options)
 	ret0, _ := ret[0].(armresources.ResourceGroupsClientCheckExistenceResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CheckExistence indicates an expected call of CheckExistence.
-func (mr *MockResourceGroupsClientInterfaceMockRecorder) CheckExistence(ctx, resourceGroupName any) *gomock.Call {
+func (mr *MockResourceGroupsClientInterfaceMockRecorder) CheckExistence(ctx, resourceGroupName, options any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckExistence", reflect.TypeOf((*MockResourceGroupsClientInterface)(nil).CheckExistence), ctx, resourceGroupName)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckExistence", reflect.TypeOf((*MockResourceGroupsClientInterface)(nil).CheckExistence), ctx, resourceGroupName, options)
 }
 
 // CreateOrUpdate mocks base method.
-func (m *MockResourceGroupsClientInterface) CreateOrUpdate(ctx context.Context, resourceGroupName string, resourceGroup armresources.ResourceGroup) error {
+func (m *MockResourceGroupsClientInterface) CreateOrUpdate(ctx context.Context, resourceGroupName string, resourceGroup armresources.ResourceGroup, options *armresources.ResourceGroupsClientCreateOrUpdateOptions) (armresources.ResourceGroupsClientCreateOrUpdateResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateOrUpdate", ctx, resourceGroupName, resourceGroup)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "CreateOrUpdate", ctx, resourceGroupName, resourceGroup, options)
+	ret0, _ := ret[0].(armresources.ResourceGroupsClientCreateOrUpdateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // CreateOrUpdate indicates an expected call of CreateOrUpdate.
-func (mr *MockResourceGroupsClientInterfaceMockRecorder) CreateOrUpdate(ctx, resourceGroupName, resourceGroup any) *gomock.Call {
+func (mr *MockResourceGroupsClientInterfaceMockRecorder) CreateOrUpdate(ctx, resourceGroupName, resourceGroup, options any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrUpdate", reflect.TypeOf((*MockResourceGroupsClientInterface)(nil).CreateOrUpdate), ctx, resourceGroupName, resourceGroup)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrUpdate", reflect.TypeOf((*MockResourceGroupsClientInterface)(nil).CreateOrUpdate), ctx, resourceGroupName, resourceGroup, options)
 }
