@@ -1,4 +1,4 @@
-name: E2E test main
+name: E2E test main branch
 on:
   workflow_call:
     secrets:
