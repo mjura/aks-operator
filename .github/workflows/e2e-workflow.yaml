@@ -1,4 +1,4 @@
-name: e2e-latest-rancher
+name: E2E test workflow
 on:
   workflow_dispatch:
   schedule:
